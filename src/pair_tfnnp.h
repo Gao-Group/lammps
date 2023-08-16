@@ -49,6 +49,7 @@ class PairTFNNP : public Pair {
  
 
 private:
+  bool isGraphBuilt;
   char *descriptor;           // type of descriptor, e.g. ACSF
   double *eta_G2;             // eta parameters for ACSF G2 descriptor 
   double *zeta;               // zeta parameters for ACSF G4 descriptor 

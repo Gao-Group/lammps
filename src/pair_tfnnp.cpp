@@ -250,7 +250,7 @@ void PairTFNNP::read_file(char *filename)
 
 /* ---------------------------------------------------------------------- */
 
-PairTFNNP::PairTFNNP(LAMMPS *lmp) : Pair(lmp), fingerprints(NULL), dgdr(NULL), center_atom_id(NULL), neighbor_atom_coord(NULL), atom_elements(NULL),neighbor_atom_id(NULL)
+PairTFNNP::PairTFNNP(LAMMPS *lmp) : Pair(lmp), fingerprints(NULL), dgdr(NULL), center_atom_id(NULL), neighbor_atom_coord(NULL), atom_elements(NULL),neighbor_atom_id(NULL),isGraphBuilt(false)
 {
   single_enable = 0;
   restartinfo = 0;
@@ -428,9 +428,10 @@ void PairTFNNP::init_style()
     error->all(FLERR,"Pair style tfnnp requires newton pair on");
 
   neighbor->add_request(this, NeighConst::REQ_FULL)->set_id(1);
-  
+
   // create tensorflow model
-  create_tensorflow_model();
+  if (isGraphBuilt == false)
+    create_tensorflow_model();
 }
 
 /* ----------------------------------------------------------------------
@@ -494,6 +495,8 @@ void PairTFNNP::create_tensorflow_model()
   // allocate input and output tensors for prediction
   InputValues  = (TF_Tensor**)malloc(sizeof(TF_Tensor*)*tf_input_number);
   OutputValues = (TF_Tensor**)malloc(sizeof(TF_Tensor*)*tf_output_number);
+
+  isGraphBuilt = true;
 
 }
 
@@ -857,7 +860,7 @@ void PairTFNNP::compute_derivatives()
 
 void PairTFNNP::compute(int eflag, int vflag)
 {
-  MPI_Comm_rank(world,&me);
+  //MPI_Comm_rank(world,&me);
 
   ev_init(eflag,vflag);
   
@@ -953,32 +956,31 @@ void PairTFNNP::compute(int eflag, int vflag)
     if (!strncmp(tf_output_tag[i],"stress",6)){
       buff = TF_TensorData(OutputValues[i]);
       model_output = (float_choice*)buff;
-      
-      if (vflag_either){
-	if (vflag_atom){
-	  int centerid;
-	  for (int j=0;j<num_der_pairs;j++){
-	    centerid = center_atom_id[j];
-	    vatom[centerid][0] += model_output[j*9];
-	    vatom[centerid][1] += model_output[j*9+4];
-	    vatom[centerid][2] += model_output[j*9+8];
-	    vatom[centerid][3] += model_output[j*9+1];
-	    vatom[centerid][4] += model_output[j*9+2];
-	    vatom[centerid][5] += model_output[j*9+5];
-	  }
+            
+      if (vflag_atom){
+	int centerid;
+	for (int j=0;j<num_der_pairs;j++){
+	  centerid = center_atom_id[j];
+	  vatom[centerid][0] += model_output[j*9];
+	  vatom[centerid][1] += model_output[j*9+4];
+	  vatom[centerid][2] += model_output[j*9+8];
+	  vatom[centerid][3] += model_output[j*9+1];
+	  vatom[centerid][4] += model_output[j*9+2];
+	  vatom[centerid][5] += model_output[j*9+5];
 	}
-	
-	if (vflag_global){
-	  for (int j=0;j<num_der_pairs;j++){
-	    virial[0] += model_output[j*9];
-	    virial[1] += model_output[j*9+4];
-	    virial[2] += model_output[j*9+8];
-	    virial[3] += model_output[j*9+1];
-	    virial[4] += model_output[j*9+2];
-	    virial[5] += model_output[j*9+5];
-	  }
+      }
+
+      if (vflag_global){
+	for (int j=0;j<num_der_pairs;j++){
+	  virial[0] += model_output[j*9];
+	  virial[1] += model_output[j*9+4];
+	  virial[2] += model_output[j*9+8];
+	  virial[3] += model_output[j*9+1];
+	  virial[4] += model_output[j*9+2];
+	  virial[5] += model_output[j*9+5];
 	}
-      } 
+      }
+
     }  
   } 
 }
